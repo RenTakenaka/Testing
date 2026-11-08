@@ -1,7 +1,22 @@
 const root = document.documentElement;
 const themeToggle = document.querySelector(".theme-toggle");
-const savedTheme = localStorage.getItem("strived-theme");
-if (savedTheme === "dark") root.dataset.theme = "dark";
+const readStorage = (key, fallback) => {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+const writeStorage = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // The UI remains usable when storage is disabled or full.
+  }
+};
+const savedTheme = readStorage("strived-theme", "");
+if (savedTheme === "dark" || (!savedTheme && matchMedia("(prefers-color-scheme: dark)").matches)) root.dataset.theme = "dark";
 if (themeToggle) {
   const updateThemeButton = () => {
     const dark = root.dataset.theme === "dark";
@@ -14,22 +29,9 @@ if (themeToggle) {
   themeToggle.addEventListener("click", () => {
     const dark = root.dataset.theme !== "dark";
     root.dataset.theme = dark ? "dark" : "light";
-    localStorage.setItem("strived-theme", dark ? "dark" : "light");
+    writeStorage("strived-theme", dark ? "dark" : "light");
     updateThemeButton();
   });
-}
-
-const menuToggle = document.querySelector(".menu-toggle");
-const mainNav = document.querySelector(".main-nav");
-if (menuToggle && mainNav) {
-  menuToggle.addEventListener("click", () => {
-    const open = mainNav.classList.toggle("open");
-    menuToggle.setAttribute("aria-expanded", open);
-  });
-  mainNav.querySelectorAll("a").forEach((link) => link.addEventListener("click", () => {
-    mainNav.classList.remove("open");
-    menuToggle.setAttribute("aria-expanded", "false");
-  }));
 }
 
 const progress = document.createElement("div");
@@ -50,7 +52,10 @@ document.querySelectorAll(".filter").forEach((filter) => filter.addEventListener
 
 const modal = document.querySelector("#order-modal");
 const orderForm = document.querySelector(".order-form");
-const cart = JSON.parse(localStorage.getItem("strived-cart") || "[]");
+const sizeModal = document.querySelector("#size-modal");
+const reviewModal = document.querySelector("#review-modal");
+const cart = readStorage("strived-cart", []);
+if (!Array.isArray(cart)) cart.length = 0;
 const cartDrawer = document.querySelector(".cart-drawer");
 const cartItems = document.querySelector(".cart-items");
 const cartCount = document.querySelector(".cart-count");
@@ -72,7 +77,7 @@ const renderCart = () => {
   const count = cart.length;
   if (cartCount) cartCount.textContent = count;
   if (cartTotal) cartTotal.textContent = `$${cart.reduce((sum, item) => sum + item.value, 0)}`;
-  localStorage.setItem("strived-cart", JSON.stringify(cart));
+  writeStorage("strived-cart", cart);
 };
 renderCart();
 
@@ -107,12 +112,18 @@ cartItems?.addEventListener("click", (event) => {
   }
 });
 
-if (modal && orderForm) {
-  const close = () => { modal.hidden = true; };
-  document.querySelector(".modal-close")?.addEventListener("click", close);
-  modal.addEventListener("click", (event) => { if (event.target === modal) close(); });
-  document.addEventListener("keydown", (event) => { if (event.key === "Escape") { close(); if (cartDrawer) cartDrawer.hidden = true; } });
-}
+const dialogs = [modal, sizeModal, reviewModal].filter(Boolean);
+const closeDialogs = () => dialogs.forEach((dialog) => { dialog.hidden = true; });
+dialogs.forEach((dialog) => {
+  dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.hidden = true; });
+  dialog.querySelectorAll(".modal-close").forEach((button) => button.addEventListener("click", () => { dialog.hidden = true; }));
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeDialogs();
+    if (cartDrawer) cartDrawer.hidden = true;
+  }
+});
 
 document.querySelectorAll("form:not(#size-form):not(#review-form)").forEach((form) => form.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -123,8 +134,6 @@ document.querySelectorAll("form:not(#size-form):not(#review-form)").forEach((for
   renderCart();
 }));
 
-const sizeModal = document.querySelector("#size-modal");
-const reviewModal = document.querySelector("#review-modal");
 document.querySelector("#size-open")?.addEventListener("click", () => { sizeModal.hidden = false; });
 document.querySelector("#review-open")?.addEventListener("click", () => { reviewModal.hidden = false; });
 document.querySelector("[data-close-size]")?.addEventListener("click", () => { sizeModal.hidden = true; });
